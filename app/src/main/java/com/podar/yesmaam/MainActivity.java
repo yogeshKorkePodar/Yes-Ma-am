@@ -5,21 +5,41 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.Toast;
+
+import com.android.volley.Request;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.VolleyLog;
+import com.android.volley.toolbox.JsonObjectRequest;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
+    public static Intent intent;
+    private String url = "http://www.betweenus.in/PODARAPP/PodarApp.svc/QrCodeVerificationDetails";
+    public static String client_ID, student_ID, student_name;
     static final String ACTION_SCAN = "com.google.zxing.client.android.SCAN";
+    public static ToneGenerator toneG;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        toneG = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
+
+
         try {
-            Intent intent = new Intent(ACTION_SCAN);
+            intent = new Intent(ACTION_SCAN);
             intent.putExtra("SCAN_MODE", "QR_CODE_MODE");
             startActivityForResult(intent, 0);
         } catch (ActivityNotFoundException anfe) {
@@ -62,53 +82,85 @@ public class MainActivity extends Activity {
         if (requestCode == 0) {
             if (resultCode == this.RESULT_OK) {
                 String contents = intent.getStringExtra("SCAN_RESULT");
-                String format = intent.getStringExtra("SCAN_RESULT_FORMAT");
-                Log.d("<<content", contents);
-              /*
-                String []data=contents.split("#");
-                Log.d("Data", data.toString());
-                Log.d("Data length", String.valueOf(data.length));
-                b_title=data[0];
-                Log.d("content", b_title);
-                b_services=data[1];
-                Log.d("content", b_services);
-                post =data[2];
-                Log.d("content", post);
-                _id=data[3];
-                Log.d("content", _id);
-                mobile_no=data[4];
-                Log.d("content", mobile_no);
-                email =data[5];
-                Log.d("content", email);
-                website=data[6];
-                Log.d("content", website);
-                address=data[7];
-                Log.d("content", address);*/
+                Log.d("<<QR content", contents);
 
-               /* if(b_title.isEmpty()==true || b_services.isEmpty()==true || post.isEmpty()==true || _id.isEmpty()==true ||
-                        mobile_no.isEmpty()==true || email.isEmpty()==true || website.isEmpty()==true || address.isEmpty()==true){
-                    Toast toast=Toast.makeText(getActivity().getBaseContext(), "Invalid QR code!", Toast.LENGTH_LONG);
-                    toast.setGravity(Gravity.CENTER,0, 0);
-                    toast.show();
+                String [] data=contents.split("\\|");
+
+                client_ID = data[0];
+                Log.d("<< client_ID", client_ID);
+                student_ID = data[1];
+                Log.d("student_ID", student_ID);
+                student_name =data[2];
+                Log.d("student_name", student_name);
+
+                try{
+                    JSONObject parameters = new JSONObject();
+                    parameters.put("sch_Id",client_ID);
+                    parameters.put("Stu_id",student_ID);
+
+                    makeJsonObjectRequest(parameters);
+
+                }catch (JSONException e){
+                    Log.d("<< JSONException", e.toString());
                 }
-                else{
-                    db=getActivity().openOrCreateDatabase("CARD_DB", Context.MODE_PRIVATE, null);
-                    db.execSQL("CREATE TABLE IF NOT EXISTS cards(b_title VARCHAR,b_services VARCHAR, post VARCHAR, _id VARCHAR, mobile_no VARCHAR, email VARCHAR, website VARCHAR, address VARCHAR);");
-                    db.execSQL("INSERT INTO cards VALUES('"+b_title+"','"+b_services+
-                            "','"+post+"','"+_id+
-                            "','"+mobile_no+"','"+email+
-                            "','"+website+"','"+address+"');");
-                    Log.d("card receive","card store in database");
-
-                    Toast toast = Toast.makeText(getActivity().getBaseContext(),"Profile card received successfully!", Toast.LENGTH_LONG);
-                    toast.setGravity(Gravity.CENTER, 0, 0);
-                    toast.show();
-
-                }*/
 
 
             }
 
         }
+    }
+
+    private void makeJsonObjectRequest(JSONObject parameters) {
+
+
+        JsonObjectRequest jsonObjReq = new JsonObjectRequest(Request.Method.POST,
+                url, parameters, new Response.Listener<JSONObject>() {
+
+
+
+            @Override
+            public void onResponse(JSONObject response) {
+                Log.d("<< onResponse", response.toString());
+
+                try {
+                    // Parsing json object response
+                    // response will be a json object
+
+                    String status_code = response.getString("Status");
+                    Log.d("status_code", status_code);
+
+                    String status_message = response.getString("StatusMsg");
+                    Log.d("status_message", status_message);
+
+                    if(status_code.equalsIgnoreCase("1")){
+                        MediaPlayer mp = MediaPlayer.create(getApplicationContext(), R.raw.thankyou);
+                        mp.start();
+
+                        startActivityForResult(intent, 0);
+                    }
+
+
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    Toast.makeText(getApplicationContext(),
+                            "Error: " + e.getMessage(),
+                            Toast.LENGTH_LONG).show();
+                }
+
+            }
+        }, new Response.ErrorListener() {
+
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                VolleyLog.d("<< onErrorResponse", "Error: " + error.getMessage());
+                Toast.makeText(getApplicationContext(),
+                        error.getMessage(), Toast.LENGTH_SHORT).show();
+                // hide the progress dialog
+
+            }
+        });
+
+        // Adding request to request queue
+        AppController.getInstance().addToRequestQueue(jsonObjReq);
     }
 }
